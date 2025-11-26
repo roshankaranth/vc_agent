@@ -1,8 +1,11 @@
 import imaplib
 import email
+import os
+import smtplib
 from email.header import decode_header
 from langchain.tools import tool
-import os
+from email.mime.text import MIMEText
+from email.utils import formataddr
 
 
 def _decode_value(value):
@@ -63,12 +66,6 @@ def fetch_latest_email(_=None):
     except Exception as e:
         return f"Error fetching email: {e}"
     
-import smtplib
-from email.mime.text import MIMEText
-from email.utils import formataddr
-from langchain.tools import tool
-import os
-
 
 @tool("send_email", return_direct=True)
 def send_email(to_addr: str, subject: str, body: str):
