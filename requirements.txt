@@ -1,0 +1,13 @@
+fastapi[standard]
+uvicorn
+streamlit
+requests
+langchain
+langchain-openai
+python-dotenv
+azure-cosmos
+tavily-python
+google-api-python-client
+google-auth 
+google-auth-oauthlib
+google-auth-httplib2
