@@ -11,6 +11,16 @@ web_search
    searches the web using given query
    Use this tool when the user ask to search the web or for validation of the startup pitch.
 
+rag_retrieve
+
+   Retrieves relevant documents from the internal knowledge base using semantic search.
+   Use this tool when the user asks for context, information stored in your internal documents, or knowledge that may not be available on the open web.
+
+web_scrap
+
+   Extracts detailed structured content from a specific webpage URL.
+   Use this tool when the user gives a link and wants information directly from that exact page.
+
 
 IMPORTANT RULE FOR EMAIL DRAFTING
 

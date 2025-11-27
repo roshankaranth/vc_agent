@@ -107,6 +107,43 @@ def from_openai_msg(msg):
 
     return AIMessage(content=content, tool_calls=lc_tool_calls)
 
+def tools_to_description_string(tools: list) -> str:
+    """
+    Converts a list of external tool definitions (JSON format) into a readable
+    string description suitable for system prompts.
+
+    Args:
+        tools (list): List of tool metadata dicts matching the OpenAI tool schema.
+
+    Returns:
+        str: Human-friendly description of the tools.
+    """
+    lines = []
+    for i, tool in enumerate(tools, start=1):
+        fn = tool.get("function", {})
+        name = fn.get("name", "unknown_tool")
+        desc = fn.get("description", "").strip()
+        params = fn.get("parameters", {})
+        props = params.get("properties", {})
+        required = params.get("required", [])
+
+        lines.append(f"{i}. {name}")
+        lines.append(f"   {desc}")
+
+        if not props:
+            lines.append("   Parameters: none")
+        else:
+            lines.append("   Parameters:")
+            for p_name, p_info in props.items():
+                p_desc = p_info.get("description", "")
+                p_type = p_info.get("type", "unknown")
+                req_mark = " (required)" if p_name in required else ""
+                lines.append(f"     - {p_name} ({p_type}){req_mark}: {p_desc}")
+
+        lines.append("") 
+
+    return "\n".join(lines).strip()
+
 def reasoning_node(state: AgentState, config):
     """
     Perform LLM reasoning. Decide whether to:
@@ -127,7 +164,16 @@ def reasoning_node(state: AgentState, config):
     openai_messages = []
     tool_messages = []
 
-    messages = [SystemMessage(content=SYSTEM_PROMPT)]
+    external_tool_desc = ''
+
+    try:
+        external_tool_desc = "\n\nExternal Tools Attached : \n\n" + tools_to_description_string(state["external_tools"])
+        logger.info("External tool description generated sucessfully")
+
+    except Exception as e:
+        logger.info(f"Error when generating tool desciption. Fallback to no tool description : {e}")
+
+    messages = [SystemMessage(content=SYSTEM_PROMPT + external_tool_desc)]
     if state.get("messages"):
         messages += state["messages"]
 

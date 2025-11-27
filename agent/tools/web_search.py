@@ -28,6 +28,8 @@ def web_search(query : str) -> List[Dict[str, Any]]:
         search results.
     """
 
+    search_result = []
+
     try:
         search_result  = tavily_client.search(
         query = query,
