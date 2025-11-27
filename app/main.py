@@ -31,7 +31,6 @@ class ChatResponse(BaseModel):
     response : Optional[str] = None
 
 
-
 @app.post("/chat")
 async def chat(request: ChatRequest):
 

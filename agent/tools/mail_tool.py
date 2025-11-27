@@ -27,7 +27,6 @@ def _extract_body(msg):
     return ""
     
 
-@tool("fetch_latest_email", return_direct=True)
 def fetch_latest_email(_=None):
     """
     Fetches the latest email from the inbox and returns its subject and body.
@@ -70,7 +69,6 @@ from langchain.tools import tool
 import os
 
 
-@tool("send_email", return_direct=True)
 def send_email(to_addr: str, subject: str, body: str):
     """
     Sends an email using SMTP.

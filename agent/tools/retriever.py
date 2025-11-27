@@ -63,7 +63,6 @@ def vector_search(queries):
 
     return result
 
-@tool("rag_retrieve", return_direct=True)
 def retriever(user_query : str):
     """
     Orchestrates the entire retrieval process from a user query to a final list of documents.

@@ -1,26 +1,33 @@
+import json
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from agent.prompt import SYSTEM_PROMPT
+from openai import OpenAI
+from langgraph.types import Command
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import MessagesState
-from agent.tools.mail_tool import fetch_latest_email, send_email
+from langchain_core.messages.tool import ToolCall
+from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
+
+
+from agent.state import tools, Internal_Tools, AgentState
 from agent.tools.retriever import retriever
 from agent.tools.web_search import web_search
 from agent.tools.web_scraping import web_scrap
-from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
-from agent.prompt import SYSTEM_PROMPT
-from openai import OpenAI
-from agent.state import tools
-from typing import List, Dict
-import json
-from langchain_core.messages.tool import ToolCall
+
 
 LLM_MODEL = "gpt-4o-mini-2024-07-18"
+TOOL_REGISTRY = {
+    "web_search": web_search,
+    "web_scrap": web_scrap,
+    "rag_retrieve": retriever
+}
+
 load_dotenv()
+client = OpenAI()
 
 def convert_msg_to_dict(msg):
     """Convert LangChain messages → OpenAI Messages API format."""
+
     if msg.type == "system":
         return {"role": "system", "content": msg.content}
     if msg.type == "human":
@@ -42,10 +49,9 @@ def convert_msg_to_dict(msg):
 
 
 def from_openai_msg(msg):
-    """Convert *dict* from OpenAI ChatCompletion → LangChain Message."""
-    role = msg["role"]
+    """Convert AI message from OpenAI ChatCompletion → LangChain Message."""
+    
     content = '' if msg.get("content") is None else msg['content']
-
     lc_tool_calls = []
     if msg.get('tool_calls') is not None:
         for tool in msg['tool_calls']:
@@ -58,21 +64,13 @@ def from_openai_msg(msg):
     return AIMessage(content=content, tool_calls = lc_tool_calls)
 
 
-class AgentState(MessagesState):
-    query: str
-    response: str
-    external_tools : List[Dict]
-    tool_results : List[Dict]
-    tool_call_plan : List[Dict]
-    tools_used : List[str]
-
 
 def reasoning_node(state: AgentState):
-    client = OpenAI()
 
-    messages = [SystemMessage(content=SYSTEM_PROMPT)]
     openai_messages = []
     tool_messages = []
+
+    messages = [SystemMessage(content=SYSTEM_PROMPT)]
     if state.get("messages"):
         messages += state["messages"]
 
@@ -88,7 +86,8 @@ def reasoning_node(state: AgentState):
 
     for msg in messages:
         openai_messages = openai_messages + [convert_msg_to_dict(msg)]
-    runtime_tools = state["external_tools"]
+
+    runtime_tools = tools + state["external_tools"]
 
     decision = client.chat.completions.create(
         model=LLM_MODEL,
@@ -102,16 +101,35 @@ def reasoning_node(state: AgentState):
     lc_messages = tool_messages + [lc_messages]
 
     if choice.tool_calls is None:
+        
         response_text = choice.content or ""
         return {
             "response": response_text,
             "messages": lc_messages,  
         }
+    
     else:
+
         tool_calls = []
+        #ASSUMPTION : The model only ouputs one tool call at a time.
         for call in choice.tool_calls:
+            
             args = json.loads(call.function.arguments or "{}")
-            tool_calls.append({
+            if call.function.name in Internal_Tools:
+                return Command(
+                    update={"tool_call_plan" : [{
+                "tool_call_id": call.id,
+                "params": {
+                    "name": call.function.name,
+                    "arguments": args
+                }
+            }], "tools_used" : [call.function.name], "messages": lc_messages},
+                    goto="tool_node"
+                )
+            
+            else:
+
+                tool_calls.append({
                 "tool_call_id": call.id,
                 "params": {
                     "name": call.function.name,
@@ -127,24 +145,30 @@ def reasoning_node(state: AgentState):
         }
 
 
+def tool_node(state : AgentState):
+
+    tool_call = state["tool_call_plan"][0]
+    name = tool_call["params"]["name"]
+    args = tool_call["params"]["arguments"]
+
+
+    if name not in TOOL_REGISTRY:
+        raise ValueError(f"Unknown tool: {name}")
+
+    result = TOOL_REGISTRY[name](**args)
+
+    response = {"content" : json.dumps(result), "tool_call_id" : state["tool_call_plan"][0]["tool_call_id"]}
+    return {"tools_used" : [], "tool_call_plan" : [], "tool_results" : [response]}
+
+
 builder = StateGraph(AgentState)
 memory = MemorySaver()
 
 builder.add_node("reasoning_node", reasoning_node)
-# builder.add_node("tool_node", tool_node)
-
+builder.add_node("tool_node", tool_node)
 
 builder.add_edge(START, "reasoning_node")
-# builder.add_conditional_edges(
-#     "reasoning_node",
-#     tools_condition,      
-#     {
-#         "tools": "tool_node",
-#         "__end__": END,
-#     },
-# )
-# builder.add_edge("tools", "reasoning_node")
+builder.add_edge("tool_node", "reasoning_node")
 builder.add_edge("reasoning_node", END)
-
 
 graph = builder.compile(checkpointer=memory)
