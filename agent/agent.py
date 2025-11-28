@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from agent.prompt import SYSTEM_PROMPT
 from openai import OpenAI
+from datetime import datetime
 from langgraph.types import Command
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -144,6 +145,9 @@ def tools_to_description_string(tools: list) -> str:
 
     return "\n".join(lines).strip()
 
+def get_current_datetime_str():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 def reasoning_node(state: AgentState, config):
     """
     Perform LLM reasoning. Decide whether to:
@@ -173,7 +177,9 @@ def reasoning_node(state: AgentState, config):
     except Exception as e:
         logger.info(f"Error when generating tool desciption. Fallback to no tool description : {e}")
 
-    messages = [SystemMessage(content=SYSTEM_PROMPT + external_tool_desc)]
+    date_and_time = "Today's date and time :\n" + get_current_datetime_str() + "\n\n"
+
+    messages = [SystemMessage(content=date_and_time + SYSTEM_PROMPT + external_tool_desc)]
     if state.get("messages"):
         messages += state["messages"]
 
